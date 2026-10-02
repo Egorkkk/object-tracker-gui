@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Object Tracker</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<header><strong>Object Tracker</strong><span id="projectName">Локальный 6DoF tracking</span><span id="connection">Подключение…</span><button id="save">Сохранить</button></header>
+<div id="error" role="alert" hidden></div>
+<div class="layout"><aside>
+<details open><summary>Проект и исходные данные</summary>
+<label>Название<input id="name" value="phone_take01"></label>
+<label>Каталог кадров или видео<div class="path"><input id="source" placeholder="E:\shot\frames"><button data-browse="source">…</button></div></label>
+<label>Исходный mesh<div class="path"><input id="mesh" placeholder="PLY / OBJ / GLB / GLTF"><button data-browse="mesh">…</button></div></label>
+<label>Каталог нового проекта<div class="path"><input id="directory" placeholder="E:\output\phone_take01"><button data-browse="directory">…</button></div></label>
+<label>FPS<input id="fps" type="number" value="24" min="0.1" step="0.1"></label>
+<p class="hint">Для видео FPS берётся из источника. Новый проект создаётся в пустом каталоге; исходники не изменяются.</p>
+<button id="create" class="primary">Создать проект</button>
+<label>Открыть существующий проект<div class="path"><input id="openDirectory"><button data-browse="openDirectory">…</button></div></label><button id="open">Открыть</button>
+</details>
+<details><summary>Mesh · миллиметры</summary><div id="meshInfo" class="hint"></div>
+<div class="triple"><label>X<input id="dimX" type="number" step="any"></label><label>Y<input id="dimY" type="number" step="any"></label><label>Z<input id="dimZ" type="number" step="any"></label></div>
+<label><input type="checkbox" id="center"> Центрировать</label>
+<button id="prepareMesh">Применить размеры mesh</button><label>Uniform scale исходного mesh<input id="meshScale" type="number" value="1" min="0.000001" step="any"></label><button id="scaleMesh">Применить uniform scale</button><p class="hint">Изменение mesh сбрасывает активные poses; предыдущие raw результаты сохраняются.</p></details>
+<details><summary>Камера</summary><div class="pair"><label>fx<input id="fx" type="number" step="any"></label><label>fy<input id="fy" type="number" step="any"></label><label>cx<input id="cx" type="number" step="any"></label><label>cy<input id="cy" type="number" step="any"></label></div>
+<label>Эквивалентное фокусное, мм<input id="focal" type="number" value="35" min="1"></label><button id="estimate">Приблизительно рассчитать fx/fy</button><p class="hint">Приближение по ширине полного кадра 36 мм, не калибровка.</p><button id="camera">Применить камеру</button><p class="hint">Tracked poses архивируются; ручные anchors сохраняются для нового refine.</p></details>
+<details open><summary>Ручной initial pose</summary><p class="hint">Object → camera · OpenCV · translation в мм</p>
+<div class="triple"><label>RX °<input id="rx" type="number" value="90" step="0.1"></label><label>RY °<input id="ry" type="number" value="0" step="0.1"></label><label>RZ °<input id="rz" type="number" value="0" step="0.1"></label><label>TX мм<input id="tx" type="number" value="0" step="1"></label><label>TY мм<input id="ty" type="number" value="0" step="1"></label><label>TZ мм<input id="tz" type="number" value="700" step="1"></label></div>
+<button id="pose">Применить pose</button><button id="anchor">Сохранить pose anchor</button>
+<label>Импорт pose NPY<div class="path"><input id="posePath"><button data-browse="posePath">…</button></div></label><button id="importPose">Импортировать</button>
+<button id="refine" class="primary">Refine текущего кадра</button><div class="pair"><button id="accept">Принять refine</button><button id="reject">Отклонить</button></div><div id="refineInfo" class="hint"></div>
+</details>
+<details><summary>Маски</summary><p class="hint">Слои отображаются и передаются отдельно. GoTrack baseline не использует маски для refinement.</p>
+<label>Object mask directory<div class="path"><input id="objectMask"><button data-browse="objectMask">…</button></div></label>
+<label>Occlusion mask directory<div class="path"><input id="occlusionMask"><button data-browse="occlusionMask">…</button></div></label>
+<label>Сопоставление<select id="maskMatch"><option value="filename">Имя файла (без расширения)</option><option value="number">Исходный номер кадра</option></select></label><button id="masks">Применить маски</button><div id="maskInfo" class="hint"></div></details>
+<details><summary>Diagnostics и экспорт</summary><label>Минимальный score<input id="minScore" type="number" value="0.1" step="0.01"></label><label>Максимальный dT, мм<input id="maxDT" type="number" value="50"></label><label>Максимальный dR, °<input id="maxDR" type="number" value="30"></label><button id="thresholds">Применить пороги</button><p class="hint">Пороги отмечают новые suspicious frames; raw poses не меняются.</p><button id="export">Экспорт NPY / NPZ / JSON / CSV</button><button id="preview">Создать preview MP4</button><div id="downloads"></div><button id="environment">Проверить окружение</button><pre id="environmentInfo"></pre></details>
+</aside>
+<main><div class="toolbar"><label><input id="showInitial" type="checkbox" checked> Initial <i class="yellow"></i></label><label><input id="showRefined" type="checkbox" checked> Refined <i class="green"></i></label><label><input id="showMasks" type="checkbox" checked> Маски</label><label><input id="showObjectMask" type="checkbox" checked> Object</label><label><input id="showOcclusionMask" type="checkbox" checked> Occlusion</label><select id="displayMode"><option value="contour">Контур</option><option value="wireframe">Wireframe</option><option value="shaded">Shaded preview</option></select><label>Opacity <input id="opacity" type="range" min="0" max="1" step="0.05" value="0.5"></label></div>
+<div class="viewer"><img id="frameImage" alt="Выберите проект для просмотра"><div id="empty">Создайте или откройте проект, затем выберите кадр и задайте initial pose.</div></div>
+<div class="toolbar"><button id="prev">◀</button><button id="play">▶ Воспроизвести</button><button id="next">▶</button><label>Кадр <input id="frameNumber" type="number" min="0" value="0"></label><span id="frameLabel"></span></div>
+<input id="timeline" type="range" min="0" max="0" value="0"><canvas id="statusStrip" height="24" title="Нажмите для перехода к кадру"></canvas>
+<div class="legend">Серый: untracked · зелёный: tracked · голубой: anchor · жёлтый: warning · красный: failed</div>
+<div class="trackControls"><label>Начало<input id="rangeStart" type="number" min="0" value="0"></label><button id="setStart">← Текущий</button><label>Конец<input id="rangeEnd" type="number" min="0" value="0"></label><button id="setEnd">← Текущий</button><label><input id="respectAnchors" type="checkbox" checked> Учитывать anchors</label><button id="track" class="primary">Track / Retrack диапазон</button><button id="cancel">Отмена</button><button id="resume">Продолжить</button></div>
+<p class="hint">Конец меньше начала — tracking назад. Retrack заменяет активные результаты только выбранного диапазона.</p>
+<progress id="progress" value="0" max="1"></progress><div id="jobInfo">Нет активного задания</div><div id="currentDiagnostics"></div>
+<div class="graphs"><label>Score<canvas id="scoreGraph" height="90"></canvas></label><label>dT, мм<canvas id="translationGraph" height="90"></canvas></label><label>dR, °<canvas id="rotationGraph" height="90"></canvas></label></div>
+</main></div>
+<dialog id="browser"><h3>Файлы на машине сервера</h3><div class="path"><input id="browsePath"><button id="browseGo">Перейти</button><button id="browseUp">Вверх</button></div><div id="browseEntries"></div><div class="toolbar"><button id="browseSelect">Выбрать этот каталог</button><button id="browseClose">Закрыть</button></div><p class="hint">Для нового output-каталога выберите родительский и допишите имя в поле пути.</p></dialog>
+<script src="/app.js"></script></body></html>
