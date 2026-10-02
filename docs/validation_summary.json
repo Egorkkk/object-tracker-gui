@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-02",
+  "upstream_commit": "68f76055755f2a4a8967e13ece834f975f008bdf",
+  "checkpoint_sha256": "f7d127abe2b8e37b1322a19115343286a6560700c6e02fc6080b4e2426a01086",
+  "full_regression": {
+    "frames": 60,
+    "max_matrix_difference": 0.0,
+    "max_score_difference": 0.0,
+    "refine_score_difference": 0.0,
+    "passed": true
+  },
+  "final_regression": {
+    "frames": 12,
+    "max_matrix_difference": 0.0,
+    "passed": true
+  },
+  "browser_acceptance": {
+    "frames": 60,
+    "cancel_after": 4,
+    "checks": [
+      "create",
+      "camera",
+      "import pose",
+      "refine",
+      "accept",
+      "track",
+      "cancel",
+      "reopen",
+      "resume",
+      "range retrack",
+      "export",
+      "preview",
+      "save",
+      "reopen"
+    ],
+    "passed": true
+  },
+  "recovery": {
+    "preserved_frames": [
+      "0"
+    ],
+    "resumed_to": 7,
+    "passed": true
+  },
+  "environment": {
+    "python": "3.10.22",
+    "torch": "2.0.1+cu117",
+    "numpy": "1.23.5",
+    "gpu": "NVIDIA GeForce RTX 4060 Ti",
+    "cuda": "11.7",
+    "egl": true,
+    "libcuda": true,
+    "dino_weights": "/home/egorkkk/.cache/torch/hub/checkpoints/dinov2_vits14_reg4_pretrain.pth",
+    "ffmpeg": "/usr/bin/ffmpeg",
+    "ffprobe": "/usr/bin/ffprobe"
+  },
+  "unit_tests": 19
+}
