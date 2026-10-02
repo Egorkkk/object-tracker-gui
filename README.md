@@ -37,37 +37,51 @@ there is no automatic dependency or model download.
 
 ## Browser workflow
 
-1. Select an image directory (PNG/JPG/JPEG) or MP4/MOV/MKV, source mesh, and a new
-   empty project directory. Video frames are extracted automatically by ffmpeg
-   into the project cache. For image sequences, set source FPS.
-2. Check mesh dimensions in millimeters. Apply X/Y/Z dimensions, uniform scale,
-   or centering as needed; preparation always creates a new cache asset.
-3. Set `fx/fy/cx/cy`. Initial focal values use a labeled approximate 35 mm
-   full-frame equivalent, not calibrated intrinsics.
-4. Choose a start frame, edit RX/RY/RZ and TX/TY/TZ, or import a 4x4 NPY pose.
-   Manual edits autosave. Save an anchor when the pose is ready.
-5. Run **Refine**, compare yellow initial and green refined overlays, then accept
+1. Use **File → New Project** to choose a parent directory and project name.
+   Source and Mesh are optional at creation. **File → Open Project** and recent
+   projects reopen existing `project.json` files.
+2. Select **Source** in Project Tree. **Browse Server** opens an Explorer-style
+   browser with Places, breadcrumbs, history, filters and sortable details.
+   Choose an image folder or a video; video frames are extracted into project
+   cache. **Upload** uses the browser's native picker for one video or multiple
+   images. Set sequence FPS in Inspector.
+3. Select **Mesh** and browse/upload a mesh. Check dimensions in millimeters;
+   apply X/Y/Z dimensions, uniform scale or centering in Inspector. Preparation
+   creates a separate asset. GLTF/OBJ uploads can include sibling dependencies.
+4. In **ALIGN**, check camera intrinsics. Initial focal values are a labeled
+   approximate 35 mm full-frame equivalent, not calibrated intrinsics.
+5. Choose a frame and align using XYZ translation handles or rotation rings.
+   **Local / Global** changes gizmo axes, not the canonical pose convention.
+   Numeric RX/RY/RZ and TX/TY/TZ remain available in every Inspector context.
+   Shift gives fine adjustment; edits autosave. Import NPY or set a pose anchor.
+6. **Refine**, compare yellow initial and green refined overlays, then accept
    or reject. Unaccepted refinement does not replace the active tracked pose.
-6. Set inclusive start/end indices and run **Track / Retrack**. End < start tracks
-   backward. By default anchors inside the range reinitialize refinement there.
-   Without additional anchors, baseline refined-pose propagation is unchanged.
-7. Cancel between frames, reopen the project and resume. A stopped process is
-   detected on reopen; already committed frame results are kept. A pose or
-   calibration edit invalidates the previous resume intent.
-8. Scrub/play the timeline, inspect score/dT/dR, click graphs to navigate, correct
-   a pose and retrack only the selected range. Raw files from earlier attempts
-   remain in separate attempt directories.
-9. Load object/occlusion mask directories, matched by filename stem or source
-   number. Layers have independent display controls. Missing frame masks are
-   reported. GoTrack receives both inputs but does **not** consume either in its
-   correspondence/refinement pipeline.
-10. Export NPY, indexed NPZ, JSON and CSV, or generate an overlay MP4 at source FPS.
-    Browser download links are provided after export and preview generation.
+7. In **TRACK**, drag the Frames track or In/Out edges to select an inclusive
+   range. Track forward/backward or retrack it. Anchors reinitialize refinement
+   when enabled; baseline pose propagation is unchanged.
+8. Cancel between frames, reopen and **Resume**. Saved results are retained.
+   Correct a pose and retrack only the affected range.
+9. In **REVIEW**, scrub/play, inspect score/ΔT/ΔR and click diagnostic graphs to
+   navigate. Viewer supports fit, 1:1, wheel zoom, middle-button pan, independent
+   overlays, wireframe and shaded preview. Resize panels with splitters; sizes
+   persist in the browser.
+10. Select each mask layer to browse a server folder or upload multiple masks.
+    Match by filename stem or source frame number. Object and occlusion masks
+    remain separate; GoTrack baseline does not use them for refinement.
+11. Select **Exports** for NPY, indexed NPZ, JSON, CSV and an overlay MP4 at source
+    FPS. Download links remain in the project.
 
-The file browser enumerates the server filesystem. To create a new output
-subdirectory, select its parent and append the new directory name in the field.
-Source sequences may start at arbitrary numbers; sequence index, filename and
-source frame number are stored separately.
+**Replace** is always available in each resource Inspector. Changes affecting
+existing poses offer **Keep as Separate Solution**, **Clear Active Tracking** or
+**Cancel**. Open a preserved solution under **Other Solutions** to restore its
+source, mesh, camera, masks and poses. Uploads use unique project-local folders
+and never overwrite same-named files. Browse Server references existing files
+without copying them.
+
+Shortcuts: **Left/Right** frames, **Space** playback, **Ctrl+S** save, **W/E**
+translate/rotate, **L/G** local/global. Navigation shortcuts are inactive while
+editing fields or using dialogs. Sequence indices, filenames and source numbers
+are stored separately.
 
 ## Storage and behavior
 
@@ -75,7 +89,9 @@ source frame number are stored separately.
 - `project.json` holds versioned state and is atomically replaced on changes.
 - `poses/<attempt>/<index>.json` holds a durable raw per-frame record.
   Tracking progress and continuation pose are saved after every frame.
-- `cache/meshes/` and `cache/frames/` contain prepared assets, never source edits.
+- `cache/meshes/`, `cache/frames*/` and `cache/assets/<kind>/<batch>/` contain
+  prepared/extracted/uploaded assets, never source edits.
+- `solutions/` contains preserved resource contexts and raw pose references.
 - `diagnostics/` retains previous settings/job snapshots; `exports/` and
   `previews/` hold derived deliverables.
 - `outputs/logs/application.log` and `backend_gotrack.log` retain full exceptions.
@@ -85,9 +101,10 @@ source frame number are stored separately.
   across frames and project changes; renderer resources are released on that
   same thread when switching meshes or shutting down.
 
-Changing camera settings archives active results and retains manual anchors for
-new refinement. Changing mesh preparation archives results and clears active
-poses/anchors because the object coordinate frame may change. Thresholds mark
+Changing camera settings requires an explicit invalidation choice when results
+exist and retains manual anchors for new refinement. Mesh/source changes clear
+active poses and anchors after that choice; old contexts can be preserved as
+solutions. Source changes also reset camera assumptions and mask mappings. Thresholds mark
 new results as warnings without modifying the predicted matrices.
 
 ## GoTrack compatibility
@@ -105,6 +122,7 @@ is recorded. Renderer unit/convention conversions remain inside GoTrack.
 
 ```bash
 bash scripts/run_python.sh -m unittest discover -s tests -v
+node tests/pose_math.mjs
 bash scripts/run_python.sh scripts/regression_gotrack.py --frames 60 --output outputs/regression_new
 bash scripts/run_python.sh scripts/recovery_smoke.py
 ```
@@ -118,15 +136,22 @@ raw matrices, score comparisons and prototype overlays.
 The browser acceptance script uses an existing Playwright installation:
 
 ```bash
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node scripts/ui_redesign_smoke.mjs
+# Full 60-frame variant:
 PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node scripts/browser_smoke.mjs
 ```
 
-Run the server on port 8765 first. The script creates its own project and verifies
-60-frame GPU tracking, cancel/reopen/resume, range retracking, export and preview.
+Run the server first (`TRACKER_URL` defaults to `http://127.0.0.1:8765`). The
+script creates its own project and checks browser dialogs, native uploads, gizmos,
+GPU refine/tracking, cancel/reopen/resume, resource replacement/solutions, masks,
+backward tracking, export and preview. Default range is eight frames; the
+compatibility entry point `browser_smoke.mjs` checks 60 frames.
 See [validation results](docs/VALIDATION.md).
 
 ## Current limits
 
+- Folder upload and drag/drop are deferred; multiple-file uploads and server
+  folder selection are supported. Mesh dependencies must be sibling files.
 - One project and one GPU job at a time; cancellation finishes the current frame.
 - RGB pinhole cameras; nonzero distortion is rejected by the baseline backend.
 - Sequence discovery sorts all supported image files naturally. Separate mixed

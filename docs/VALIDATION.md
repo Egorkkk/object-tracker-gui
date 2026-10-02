@@ -95,3 +95,26 @@ relocalization and masks influencing GoTrack are not implemented. GLB preparatio
 has geometry tests, but phone tracking equivalence is established on the original
 prepared PLY path. The local server supports one active project/job and should be
 used on the local machine or trusted LAN/Tailscale network.
+
+## Browser UI redesign — 2026-10-02
+
+The redesigned interface passed 21 Playwright checks with real GoTrack GPU inference.
+The run created a project through File > New, browsed server image sequences,
+uploaded a mesh, edited pose using Global/Local translation handles and a rotation
+ring, refined/accepted, tracked, cancelled, reopened and resumed without changing
+committed poses, and retracked a backward range without changing outside poses.
+
+It also covered explicit invalidation on source/mesh replacement, preserved
+solution restoration, multiple native uploads for object/occlusion masks and source
+frames, independent mask visibility, pose exports, MP4 preview, keyboard shortcuts,
+resizable panels, and reload at 1440x900 and 1920x1080. No browser page errors.
+Artifacts: `outputs/ui-redesign-1790965183910/` (report and screenshots).
+
+23 Python unit tests pass, including four new resource lifecycle/upload tests.
+`node tests/pose_math.mjs` passes Local/Global transform, Euler and perspective
+axis-constraint checks. JavaScript syntax and `git diff --check` pass. Inference
+adapter, unchanged prototypes and upstream GoTrack have no source diff in this
+redesign. The earlier 60-frame parity result above remains the inference baseline.
+
+The port 8765 server was restarted with the user's existing `0370_test1` project.
+A separate Chromium check loaded its 1920-pixel frame with no page errors.
