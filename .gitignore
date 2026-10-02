@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+testdata_local/
+outputs/
+
+# Local footage, meshes and model weights are not repository assets.
+/testdata/
+*.pt
+*.pth

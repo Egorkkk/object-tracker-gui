@@ -1,0 +1,13 @@
+diff --git a/utils/dinov2_util.py b/utils/dinov2_util.py
+index 703489e..5f755ab 100644
+--- a/utils/dinov2_util.py
++++ b/utils/dinov2_util.py
+@@ -81,7 +81,7 @@ class DinoFeatureExtractor(nn.Module):
+         self.model: torch.nn.Module = dinov2_backbones.__dict__[self.model_base_name](
+             pretrained=True
+         )
+-        self.model = torch.hub.load("facebookresearch/dinov2", self.model_base_name)
++        # self.model = torch.hub.load("facebookresearch/dinov2", self.model_base_name)
+ 
+         # DINOv2 is trained with stride 14.
+         if self.stride != 14:

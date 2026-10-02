@@ -1,0 +1,3 @@
+[submodule "external/gotrack"]
+	path = external/gotrack
+	url = https://github.com/facebookresearch/gotrack.git
