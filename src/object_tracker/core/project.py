@@ -64,42 +64,48 @@ class Project:
     def __init__(self, directory, state):
         self.directory = Path(directory)
         self.state = state
+        state.setdefault('solutions', [])
+        state.setdefault('exports', [])
         self.sequence = ImageSequence(state['source']['frames'])
 
     @classmethod
-    def create(cls, directory, source, mesh, name='Untitled', camera=None, fps=24.,
+    def create(cls, directory, source=None, mesh=None, name='Untitled', camera=None, fps=24.,
                dimensions=None, center=False, scale=None):
-        source, mesh = local_path(source), local_path(mesh)
-        if not source.exists() or not mesh.is_file():
-            raise ValueError('Input и mesh должны существовать')
-        directory = separate_output(directory, [source, mesh])
+        sources = [local_path(value) for value in (source, mesh) if value]
+        directory = separate_output(directory, sources)
         if directory.exists() and any(directory.iterdir()):
             raise ValueError('Для нового проекта выберите пустой каталог')
+        if not np.isfinite(fps) or fps <= 0:
+            raise ValueError('FPS должен быть положительным')
+        if source and not local_path(source).exists():
+            raise ValueError('Input должен существовать')
+        if mesh and not local_path(mesh).is_file():
+            raise ValueError('Mesh должен существовать')
         directory.mkdir(parents=True, exist_ok=True)
         for sub in ('cache', 'poses', 'overlays', 'diagnostics', 'previews', 'exports', 'logs'):
             (directory / sub).mkdir(exist_ok=True)
-        if source.is_dir():
-            frames, source_type = discover(source), 'image_sequence'
-        elif source.suffix.lower() in VIDEO_SUFFIXES:
-            frames, fps = extract_video(source, directory / 'cache/frames')
-            source_type = 'video'
-        else:
-            raise ValueError('Выберите каталог кадров либо MP4/MOV/MKV')
-        image = ImageSequence(frames).rgb(0)
-        h, w = image.shape[:2]
-        if not np.isfinite(fps) or fps <= 0:
-            raise ValueError('FPS должен быть положительным')
-        if camera is None:
-            camera = dict(width=w, height=h, fx=w*35/36, fy=w*35/36, cx=w/2, cy=h/2)
-        intrinsics = CameraIntrinsics(**camera)
-        if (intrinsics.width, intrinsics.height) != (w, h):
-            raise ValueError('Размер камеры не совпадает с кадром')
-        prepared = prepare_mesh(mesh, directory / 'cache/meshes', dimensions, center, scale)
-        state = dict(version=1, application_version='0.1.0', name=name,
-                     source=dict(type=source_type, path=str(source), frames=frames, fps=fps),
-                     mesh=prepared, camera=asdict(intrinsics), backend=dict(id='gotrack'),
+        source_data = dict(type='none', path='', frames=[], fps=fps)
+        intrinsics = None
+        if source:
+            source = local_path(source)
+            if source.is_dir():
+                frames, source_type = discover(source), 'image_sequence'
+            elif source.suffix.lower() in VIDEO_SUFFIXES:
+                frames, fps = extract_video(source, directory / 'cache/frames')
+                source_type = 'video'
+            else:
+                raise ValueError('Выберите каталог кадров либо MP4/MOV/MKV')
+            h, w = ImageSequence(frames).rgb(0).shape[:2]
+            camera = camera or dict(width=w, height=h, fx=w*35/36, fy=w*35/36, cx=w/2, cy=h/2)
+            intrinsics = CameraIntrinsics(**camera)
+            if (intrinsics.width, intrinsics.height) != (w, h):
+                raise ValueError('Размер камеры не совпадает с кадром')
+            source_data = dict(type=source_type, path=str(source), frames=frames, fps=fps)
+        prepared = prepare_mesh(mesh, directory / 'cache/meshes', dimensions, center, scale) if mesh else None
+        state = dict(version=1, application_version='0.2.0', name=name, source=source_data,
+                     mesh=prepared, camera=asdict(intrinsics) if intrinsics else None, backend=dict(id='gotrack'),
                      current_frame=0, poses={}, anchors={}, drafts={}, refinements={}, job=None,
-                     masks=dict(object_mask={}, occlusion_mask={}), mask_sources={},
+                     masks=dict(object_mask={}, occlusion_mask={}), mask_sources={}, solutions=[], exports=[],
                      thresholds=dict(min_score=0.1, max_translation_mm=50., max_rotation_deg=30.))
         project = cls(directory, state)
         project.save()
@@ -113,7 +119,8 @@ class Project:
         state = json.loads((directory / 'project.json').read_text())
         if state.get('version') != 1:
             raise ValueError('Неподдерживаемая версия проекта')
-        CameraIntrinsics(**state['camera'])
+        if state.get('camera'):
+            CameraIntrinsics(**state['camera'])
         job = state.get('job')
         if job and job['status'] in ('running', 'cancelling', 'queued'):
             job['status'] = 'interrupted'

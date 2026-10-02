@@ -18,10 +18,12 @@ from object_tracker.core.storage import atomic_json, local_path
 from object_tracker.core.masks import match_masks, frame_masks
 from object_tracker.core.export import export_poses, preview_video
 
+from .resources import ResourceOperations
+
 log = logging.getLogger(__name__)
 
 
-class Application:
+class Application(ResourceOperations):
     def __init__(self, backend_factory):
         self.backend_factory = backend_factory
         self.backend = None
@@ -58,7 +60,7 @@ class Application:
             self.error = None
         try:
             project = Project.create(**body) if create else Project.open(body['directory'])
-            mesh = load_mesh(project.state['mesh']['prepared'])
+            mesh = load_mesh(project.state['mesh']['prepared']) if project.state.get('mesh') else None
             with self.lock:
                 self.project, self.mesh = project, mesh
                 project.save()
@@ -113,24 +115,14 @@ class Application:
                     raise ValueError('Пороги должны быть конечными неотрицательными числами')
                 p.state['thresholds'].update(values)
             if 'camera' in body:
-                camera = CameraIntrinsics(**body['camera'])
-                h, w = p.sequence.rgb(0).shape[:2]
-                if (camera.width, camera.height) != (w, h):
-                    raise ValueError('Размер камеры не совпадает с кадрами')
-                self._archive(p)
-                p.state['camera'] = asdict(camera)
-                p.state['poses'] = {}; p.state['refinements'] = {}; p.state['job'] = None
+                return self.replace_resource(dict(kind='camera', camera=body['camera'], invalidation=body.get('invalidation')))
             if 'mesh' in body:
-                options = body['mesh']
-                prepared = prepare_mesh(options.get('source', p.state['mesh']['source']),
-                                        p.directory / 'cache/meshes', options.get('dimensions'),
-                                        options.get('center', False), options.get('scale'))
-                self._archive(p)
-                p.state['mesh'] = prepared
-                self.mesh = load_mesh(prepared['prepared'])
-                for field in ('poses', 'anchors', 'drafts', 'refinements'):
-                    p.state[field] = {}
-                p.state['job'] = None
+                return self.replace_resource(dict(kind='mesh', path=body['mesh'].get('source'), options=body['mesh'], invalidation=body.get('invalidation')))
+            if 'fps' in body:
+                fps = float(body['fps'])
+                if not np.isfinite(fps) or fps <= 0:
+                    raise ValueError('FPS должен быть положительным')
+                p.state['source']['fps'] = fps
             p.save()
         return self.snapshot()
 
@@ -189,6 +181,8 @@ class Application:
         with self.lock:
             self.idle(); p = self.required(); index = p.check_index(index)
             initial = p.pose(index); mesh = self.mesh
+            if mesh is None:
+                raise ValueError('Сначала выберите mesh')
             attempt = 'refine-' + uuid.uuid4().hex
             def work():
                 backend = self._backend(p, attempt)
@@ -210,6 +204,8 @@ class Application:
     def track(self, body, resume=False):
         with self.lock:
             self.idle(); p = self.required(); mesh = self.mesh
+            if mesh is None or not p.state['camera']:
+                raise ValueError('Сначала выберите source и mesh')
             if resume:
                 job = p.state.get('job')
                 if not job or job.get('kind') != 'track' or not job.get('resumable') or job['status'] not in ('cancelled', 'interrupted', 'failed'):
@@ -279,7 +275,10 @@ class Application:
     def export(self):
         with self.lock:
             self.idle()
-            folder = export_poses(self.required())
+            p = self.required()
+            folder = export_poses(p)
+            p.state.setdefault('exports', []).extend(str(file.relative_to(p.directory)) for file in folder.iterdir())
+            p.save()
             return dict(directory=str(folder), files=[str(p.relative_to(self.project.directory)) for p in folder.iterdir()])
 
     def preview(self):
@@ -291,7 +290,8 @@ class Application:
                         self.progress = dict(completed=count, total=len(p.sequence.frames))
                 path = preview_video(p, mesh, progress, self.cancel)
                 with self.lock:
-                    p.state['last_preview'] = str(path.relative_to(p.directory)); p.save()
+                    p.state['last_preview'] = str(path.relative_to(p.directory))
+                    p.state.setdefault('exports', []).append(p.state['last_preview']); p.save()
             self._submit('Генерация preview', work)
         return self.snapshot()
 

@@ -42,7 +42,7 @@ def render(project, mesh, index, initial=True, refined=True, masks=True, mode='c
             if mask is not None:
                 image[mask] = (image[mask]*(1-opacity) + np.array(color)*opacity).astype(np.uint8)
     key = str(index)
-    if initial:
+    if initial and mesh is not None:
         try:
             entry = project.state['refinements'].get(key) or project.state['poses'].get(key)
             if key in project.state['drafts']:
@@ -54,7 +54,7 @@ def render(project, mesh, index, initial=True, refined=True, masks=True, mode='c
             draw_pose(image, mesh, matrix, camera, (0, 255, 255), mode, opacity)
         except ValueError:
             pass
-    if refined:
+    if refined and mesh is not None:
         result = project.state['refinements'].get(key) or project.state['poses'].get(key)
         if result:
             draw_pose(image, mesh, result['matrix'], camera, (0, 255, 0), mode, opacity)

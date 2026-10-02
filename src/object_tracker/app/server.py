@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 
 from object_tracker.app.service import Application
+from object_tracker.app.resources import InvalidationRequired
 from object_tracker.backends.gotrack.backend import GoTrackBackend
 from object_tracker.core.project import Project
 from object_tracker.core.storage import local_path
@@ -49,11 +50,32 @@ def handler_class(application):
                     if path.is_file():
                         path = path.parent
                     entries = []
-                    for entry in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+                    for entry in path.iterdir():
                         if entry.name.startswith('.'):
                             continue
-                        entries.append(dict(name=entry.name, path=str(entry), directory=entry.is_dir()))
-                    return self.respond(dict(path=str(path), parent=str(path.parent), entries=entries))
+                        try:
+                            stat = entry.stat(); directory = entry.is_dir()
+                            entries.append(dict(name=entry.name, path=str(entry), directory=directory,
+                                                type='Folder' if directory else entry.suffix.lstrip('.').upper(),
+                                                size=None if directory else stat.st_size, modified=stat.st_mtime))
+                        except (PermissionError, FileNotFoundError):
+                            continue
+                    places = [dict(name='Home', path=str(Path.home()))]
+                    with application.lock:
+                        if application.project:
+                            places.append(dict(name='Project', path=str(application.project.directory)))
+                    places += [dict(name=str(drive), path=str(drive)) for drive in sorted(Path('/mnt').glob('[a-z]')) if drive.is_dir()]
+                    return self.respond(dict(path=str(path), parent=str(path.parent), entries=entries, places=places))
+                if parsed.path == '/api/geometry':
+                    with application.lock:
+                        mesh = application.mesh
+                        if mesh is None:
+                            return self.respond(dict(vertices=[], faces=[], points=[]))
+                        faces = mesh.faces[::max(1, len(mesh.faces)//6000)]
+                        indices, inverse = np.unique(faces, return_inverse=True)
+                        vertices = mesh.vertices_mm[indices]
+                        points = mesh.vertices_mm[::max(1, len(mesh.vertices_mm)//5000)]
+                    return self.respond(dict(vertices=vertices.tolist(), faces=inverse.reshape(-1,3).tolist(), points=points.tolist()))
                 if parsed.path == '/api/environment':
                     return self.respond(dict(python=__import__('sys').executable,
                         checkpoint=(ROOT/'external/gotrack/gotrack_checkpoint.pt').is_file(),
@@ -90,7 +112,8 @@ def handler_class(application):
                     with target.open('rb') as stream:
                         shutil.copyfileobj(stream, self.wfile)
                     return
-                pages = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}
+                pages = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css',
+                         '/pose-math.js': 'pose-math.js', '/gizmo.js': 'gizmo.js', '/browser.js': 'browser.js'}
                 if parsed.path not in pages:
                     return self.respond(dict(error='Не найдено'), 404)
                 path = ROOT / 'frontend' / pages[parsed.path]
@@ -105,6 +128,12 @@ def handler_class(application):
                 origin = self.headers.get('Origin')
                 if origin and urlparse(origin).netloc != self.headers.get('Host'):
                     return self.respond(dict(error='Запрос с другого origin запрещён'), 403)
+                parsed = urlparse(self.path)
+                if parsed.path == '/api/upload':
+                    query = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+                    self.connection.settimeout(120)
+                    return self.respond(application.upload_file(query['id'], query['name'], self.rfile,
+                                                               int(self.headers.get('Content-Length', 0))))
                 if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
                     return self.respond(dict(error='Требуется application/json'), 415)
                 size = int(self.headers.get('Content-Length', 0))
@@ -124,6 +153,9 @@ def handler_class(application):
                 elif path == '/api/resume': result = application.track(body, True)
                 elif path == '/api/cancel': result = application.stop()
                 elif path == '/api/settings': result = application.settings(body)
+                elif path == '/api/resource': result = application.replace_resource(body)
+                elif path == '/api/solution': result = application.activate_solution(body['id'])
+                elif path == '/api/uploads/start': result = application.begin_upload(body['kind'])
                 elif path == '/api/masks': result = application.masks(body)
                 elif path == '/api/export': result = application.export()
                 elif path == '/api/preview': result = application.preview()
@@ -139,6 +171,8 @@ def handler_class(application):
                     result = application.snapshot()
                 else: return self.respond(dict(error='Не найдено'), 404)
                 self.respond(result)
+            except InvalidationRequired as exc:
+                self.respond(dict(error=str(exc), invalidation_required=True), 409)
             except Exception as exc:
                 logging.getLogger(__name__).exception('POST failed')
                 self.respond(dict(error='Ошибка: ' + str(exc)), 400)
