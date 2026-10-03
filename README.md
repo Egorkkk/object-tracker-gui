@@ -74,7 +74,8 @@ there is no automatic dependency or model download.
     Match by filename stem or source frame number. Object and occlusion masks
     remain separate; GoTrack baseline does not use them for refinement.
 11. Select **Exports** for NPY, indexed NPZ, JSON, CSV and an overlay MP4 at source
-    FPS. Download links remain in the project.
+    FPS. Poses are packed into one ZIP and automatically downloaded; a completed
+    preview MP4 also downloads automatically. Links remain for repeat downloads.
 
 **Replace** is always available in each resource Inspector. Changes affecting
 existing poses offer **Keep as Separate Solution**, **Clear Active Tracking** or
@@ -91,8 +92,9 @@ are stored separately.
 ## Nuke export
 
 Select **Exports → Nuke Geometry + Animation**, enter **Relative ×** and
-**First frame**, then click **Export Nuke Package**. Download `nuke_package.zip`,
-extract it into one folder and open `scene.nk` in Nuke. The scene contains prepared
+**First frame**, then click **Export Nuke Package**. `nuke_package.zip` downloads automatically
+when ready. Extract it into one folder and open
+`scene.nk` in Nuke. The scene contains prepared
 OBJ geometry, an animated Axis2 connected through TransformGeo, a fixed Camera2
 and ScanlineRender. Object motion is relative to that camera.
 

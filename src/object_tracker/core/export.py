@@ -1,6 +1,7 @@
 import csv
 from pathlib import Path
 import uuid
+import zipfile
 import numpy as np
 import cv2
 from .storage import atomic_json
@@ -28,6 +29,9 @@ def export_poses(project):
             writer.writerow([key, frame['source_number'], frame['filename'], entry.get('score'),
                              *matrix[:3, 3], *matrix[:3, :3].flatten(), entry.get('translation_delta_mm'),
                              entry.get('rotation_delta_deg'), entry['status']])
+    with zipfile.ZipFile(folder / 'poses_package.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+        for name in ('poses.npy', 'poses.npz', 'poses.json', 'poses.csv'):
+            archive.write(folder / name, name)
     return folder
 
 

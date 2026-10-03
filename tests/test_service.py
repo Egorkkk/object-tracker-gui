@@ -76,7 +76,10 @@ class ServiceTests(unittest.TestCase):
         matrix[2, 3] = 700
         self.app.change_pose(dict(index=0, matrix=matrix.tolist(), anchor=True))
         exported = self.app.export()
-        actual = np.load(Path(exported['directory']) / 'poses.npy')
+        import zipfile, io
+        with zipfile.ZipFile(self.app.project.directory / exported['download']) as archive:
+            self.assertEqual(set(archive.namelist()), {'poses.npy','poses.npz','poses.json','poses.csv'})
+            actual = np.load(io.BytesIO(archive.read('poses.npy')))
         np.testing.assert_array_equal(actual[0], matrix)
 
     def test_failure_is_persisted_and_can_resume(self):

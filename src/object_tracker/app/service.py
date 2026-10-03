@@ -278,18 +278,21 @@ class Application(ResourceOperations):
             self.idle()
             p = self.required()
             folder = export_poses(p)
-            p.state.setdefault('exports', []).extend(str(file.relative_to(p.directory)) for file in folder.iterdir())
+            download = str((folder / 'poses_package.zip').relative_to(p.directory))
+            p.state.setdefault('exports', []).append(download)
             p.save()
-            return dict(directory=str(folder), files=[str(p.relative_to(self.project.directory)) for p in folder.iterdir()])
+            files = [str((folder / name).relative_to(p.directory)) for name in ('poses.npy', 'poses.npz', 'poses.json', 'poses.csv')]
+            return dict(directory=str(folder), files=files, download=download)
 
     def export_nuke(self, body):
         with self.lock:
             self.idle(); p = self.required()
             folder = export_nuke(p, body.get('relative_scale', 1.), body.get('first_frame', 1))
             files = [str(file.relative_to(p.directory)) for file in sorted(folder.iterdir())]
-            p.state.setdefault('exports', []).extend(files)
+            download = str((folder / 'nuke_package.zip').relative_to(p.directory))
+            p.state.setdefault('exports', []).append(download)
             p.save()
-            return dict(directory=str(folder), files=files)
+            return dict(directory=str(folder), files=files, download=download)
 
     def preview(self):
         with self.lock:

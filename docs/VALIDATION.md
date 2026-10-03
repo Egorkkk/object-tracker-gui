@@ -158,3 +158,11 @@ Both were corrected before these validation results. No inference, project pose
 conventions or source geometry were modified. OBJ material/texture reconstruction,
 world-camera solving and quaternion interpolation at subframes are outside this
 exporter's scope.
+
+## Automatic export downloads — 2026-10-03
+
+Chromium verified exactly one automatic download for each export button:
+`poses_package.zip`, `nuke_package.zip`, and the completed preview MP4. Further
+polling and page reload triggered no additional downloads. Pose ZIP contains the
+four NPY/NPZ/JSON/CSV files; its NPY data retains manual-pose precision.
+27 Python tests pass. Artifact: `outputs/auto-download-report.json`.
