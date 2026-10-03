@@ -46,7 +46,12 @@ there is no automatic dependency or model download.
    cache. **Upload** uses the browser's native picker for one video or multiple
    images. Set sequence FPS in Inspector.
 3. Select **Mesh** and browse/upload a mesh. Check dimensions in millimeters;
-   apply X/Y/Z dimensions, uniform scale or centering in Inspector. Preparation
+   apply X/Y/Z dimensions, relative uniform scale or centering in Inspector.
+   Declared source units are converted to millimeters (GLB/GLTF default to meters).
+   Unitless meshes default to mm; use Source units > Rebuild with Units to override
+   or repair assets prepared by an older version. Relative scale multiplies the
+   current prepared size on every application. New resource loads center geometry
+   and initialize a zero-rotation alignment in front of the camera. Preparation
    creates a separate asset. GLTF/OBJ uploads can include sibling dependencies.
 4. In **ALIGN**, check camera intrinsics. Initial focal values are a labeled
    approximate 35 mm full-frame equivalent, not calibrated intrinsics.

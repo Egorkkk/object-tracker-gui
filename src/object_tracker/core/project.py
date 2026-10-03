@@ -21,11 +21,14 @@ def file_identity(path):
     return digest.hexdigest()
 
 
-def prepare_mesh(source, cache, dimensions=None, center=False, scale=None):
+def prepare_mesh(source, cache, dimensions=None, center=False, scale=None, units=None, base=None):
     source = local_path(source)
     cache = separate_output(cache, [source])
     cache.mkdir(parents=True, exist_ok=True)
-    mesh = trimesh.load(source)
+    mesh = trimesh.load(base['prepared'] if base else source)
+    detected_units = base.get('detected_units') if base else mesh.units
+    source_units = units or (base.get('source_units') if base else None) or detected_units or ('meters' if source.suffix.lower() in ('.glb', '.gltf') else 'millimeters')
+    unit_factor = 1.0 if base else trimesh.units.unit_conversion(source_units, 'millimeters')
     # New scene preparation is separate from the legacy baseline loader.
     if isinstance(mesh, trimesh.Scene):
         mesh = mesh.to_mesh()
@@ -35,20 +38,21 @@ def prepare_mesh(source, cache, dimensions=None, center=False, scale=None):
     transform = np.eye(4)
     if center:
         transform[:3, 3] = -mesh.bounds.mean(axis=0)
-    factors = np.ones(3)
+    factors = np.full(3, unit_factor)
     if dimensions is not None:
         dimensions = np.asarray(dimensions, dtype=float)
         if dimensions.shape != (3,) or not np.isfinite(dimensions).all() or np.any(dimensions <= 0) or np.any(original_extents <= 0):
             raise ValueError('Размеры mesh должны быть тремя положительными числами')
         factors = dimensions / original_extents
     elif scale is not None:
-        factors = np.broadcast_to(np.asarray(scale, dtype=float), (3,)).copy()
+        factors *= np.broadcast_to(np.asarray(scale, dtype=float), (3,))
         if not np.isfinite(factors).all() or np.any(factors <= 0):
             raise ValueError('Масштаб должен быть положительным')
     transform[:3, :] *= factors[:, None]
     identity = np.array_equal(transform, np.eye(4))
+    source_transform = transform @ np.asarray(base['source_transform']) if base else transform
     target = cache / (uuid.uuid4().hex + '.ply')
-    if source.suffix.lower() == '.ply' and identity:
+    if source.suffix.lower() == '.ply' and identity and base is None:
         shutil.copy2(source, target)  # Preserve verified geometry and appearance byte-for-byte.
     else:
         mesh.apply_transform(transform)
@@ -56,7 +60,8 @@ def prepare_mesh(source, cache, dimensions=None, center=False, scale=None):
             mesh.visual = mesh.visual.to_color()
         mesh.export(target)
     return dict(source=str(source), prepared=str(target), dimensions_mm=mesh.extents.tolist(),
-                source_transform=transform.tolist(), bounds_mm=mesh.bounds.tolist(), detected_units=mesh.units, vertices=len(mesh.vertices), faces=len(mesh.faces),
+                source_transform=source_transform.tolist(), bounds_mm=mesh.bounds.tolist(), detected_units=detected_units,
+                source_units=source_units, prepared_units='millimeters', vertices=len(mesh.vertices), faces=len(mesh.faces),
                 source_sha256=file_identity(source), prepared_sha256=file_identity(target))
 
 

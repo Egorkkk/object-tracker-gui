@@ -118,3 +118,21 @@ redesign. The earlier 60-frame parity result above remains the inference baselin
 
 The port 8765 server was restarted with the user's existing `0370_test1` project.
 A separate Chromium check loaded its 1920-pixel frame with no page errors.
+
+## Mesh units and Viewer fixes — 2026-10-03
+
+26 Python tests pass. New checks cover meters-to-mm GLB conversion, centered
+geometry, cumulative relative scale, unchanged source bytes, and contour/wireframe/
+shaded display of triangles crossing the viewport when all vertices lie outside, including near-plane crossings.
+Prepared PLY with no requested transformation still copies byte-for-byte.
+
+Chromium checks passed on the actual phone GLB: dimensions become approximately
+498 × 149 × 999 mm, initial rotation is identity, two ×10 operations accumulate
+to ×100, and numeric pose edits remain synchronized under delayed frame responses.
+Artifact: `outputs/mesh-ui-1791045092495/`.
+
+The physical dimensions of this GLB are not inferred to be a real phone: its
+normalized model coordinates multiplied by the declared meters still need known
+real-world dimensions supplied by the user. Existing project assets are not
+automatically rescaled; Rebuild with Units provides explicit correction with the
+normal dependency invalidation options. Tracking/refinement source is unchanged.

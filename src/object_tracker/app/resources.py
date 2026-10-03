@@ -71,8 +71,11 @@ class ResourceOperations:
                 source = body.get('path') or (p.state.get('mesh') or {}).get('source')
                 if not source:
                     raise ValueError('Сначала выберите mesh')
+                current = p.state.get('mesh')
+                base = current if current and str(local_path(source)) == current['source'] and not options.get('units') and ('scale' in options or 'dimensions' in options) else None
                 prepared_mesh = prepare_mesh(source, p.directory / 'cache/meshes', options.get('dimensions'),
-                                             options.get('center', False), options.get('scale'))
+                                             options.get('center', base is None), options.get('scale'),
+                                             units=options.get('units'), base=base)
                 mesh = load_mesh(prepared_mesh['prepared'])
             else:
                 camera = CameraIntrinsics(**body['camera'])
@@ -105,6 +108,15 @@ class ResourceOperations:
             else:
                 p.state['camera'] = asdict(camera)
                 p.state['camera_approximate'] = False
+            if kind in ('mesh', 'source') and p.state.get('mesh') and p.state.get('camera') and p.sequence.frames:
+                bounds = np.asarray(p.state['mesh']['bounds_mm'])
+                center = bounds.mean(axis=0)
+                extents = bounds[1] - bounds[0]
+                c = p.state['camera']
+                distance = max(10., extents[0]*c['fx']/(c['width']*.45), extents[1]*c['fy']/(c['height']*.45)) + extents[2]/2
+                matrix = np.eye(4); matrix[:3, 3] = [-center[0], -center[1], distance-center[2]]
+                key = str(p.state.get('current_frame', 0))
+                p.state['drafts'][key] = dict(matrix=matrix.tolist(), source='mesh_alignment')
             p.save()
         return self.snapshot()
 
