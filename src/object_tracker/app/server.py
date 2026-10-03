@@ -158,6 +158,7 @@ def handler_class(application):
                 elif path == '/api/uploads/start': result = application.begin_upload(body['kind'])
                 elif path == '/api/masks': result = application.masks(body)
                 elif path == '/api/export': result = application.export()
+                elif path == '/api/export/nuke': result = application.export_nuke(body)
                 elif path == '/api/preview': result = application.preview()
                 elif path == '/api/save':
                     with application.lock:

@@ -136,3 +136,25 @@ normalized model coordinates multiplied by the declared meters still need known
 real-world dimensions supplied by the user. Existing project assets are not
 automatically rescaled; Rebuild with Units provides explicit correction with the
 normal dependency invalidation options. Tracking/refinement source is unchanged.
+
+## Nuke geometry and animation export — 2026-10-03
+
+27 Python tests pass. The new exporter test verifies coordinate conversion,
+consistent mesh/translation scaling, nonconsecutive frame offsets, read-only
+source/project state, archive contents, and rejection of invalid scale or empty
+accepted poses. Browser export at scale 0.001 / first frame 1001 passed and the ZIP
+was downloaded successfully (`outputs/nuke-ui-report.json`).
+
+Actual installed Nuke 17.0v1 opened the exported .nk without parser errors.
+Eight real tracking keys matched native Axis2 world_matrix values with maximum
+component difference 1.32e-8. A separate triangle render with fx=1867, fy=1600,
+cx=1100, cy=400 at 1920x1080 matched expected OpenCV silhouette bounds within
+1.86 pixels (edge rasterization). Artifacts: `outputs/nuke-acceptance/`.
+This also verified file-path resolution and Axis2 -> TransformGeo wiring.
+
+Initial test exports exposed missing outer braces around serialized Matrix knobs
+and the vertical film-window offset's normalization by horizontal film width.
+Both were corrected before these validation results. No inference, project pose
+conventions or source geometry were modified. OBJ material/texture reconstruction,
+world-camera solving and quaternion interpolation at subframes are outside this
+exporter's scope.

@@ -88,6 +88,31 @@ translate/rotate, **L/G** local/global. Navigation shortcuts are inactive while
 editing fields or using dialogs. Sequence indices, filenames and source numbers
 are stored separately.
 
+## Nuke export
+
+Select **Exports → Nuke Geometry + Animation**, enter **Relative ×** and
+**First frame**, then click **Export Nuke Package**. Download `nuke_package.zip`,
+extract it into one folder and open `scene.nk` in Nuke. The scene contains prepared
+OBJ geometry, an animated Axis2 connected through TransformGeo, a fixed Camera2
+and ScanlineRender. Object motion is relative to that camera.
+
+Scale applies to both geometry and translation: **1** uses mm scene units;
+**0.001** uses meters. Rotation and image projection are preserved. The first
+frame maps sequence index 0; index 42 with First frame 1001 becomes Nuke frame
+1043. Only accepted tracking/manual poses are keyed; gaps keep their original
+frame offsets and Nuke interpolates matrices linearly between keys. Source assets
+and project poses are unchanged.
+
+For appending to an existing Nuke script, `import_nuke.py` provides
+`import_tracking(folder)` and resolves the mesh path to that extracted folder.
+Set the destination script format, FPS and frame range using `animation.json`.
+The package includes geometry and animation; original textures/materials are
+not reconstructed. Distorted cameras are rejected.
+
+The exporter uses the documented [Axis matrix controls](https://learn.foundry.com/nuke/content/reference_guide/3d_nodes/axis.html)
+and [Camera projection controls](https://learn.foundry.com/nuke/Content/reference_guide/3d_nodes/camera.html).
+Coordinate conversion is confined to this exporter.
+
 ## Storage and behavior
 
 - Canonical pose: `T_cam_from_object`, OpenCV (+X right, +Y down, +Z forward), mm.

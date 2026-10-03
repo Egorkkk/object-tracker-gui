@@ -17,6 +17,7 @@ from object_tracker.core.diagnostics import tracking_delta
 from object_tracker.core.storage import atomic_json, local_path
 from object_tracker.core.masks import match_masks, frame_masks
 from object_tracker.core.export import export_poses, preview_video
+from object_tracker.core.export_nuke import export_nuke
 
 from .resources import ResourceOperations
 
@@ -280,6 +281,15 @@ class Application(ResourceOperations):
             p.state.setdefault('exports', []).extend(str(file.relative_to(p.directory)) for file in folder.iterdir())
             p.save()
             return dict(directory=str(folder), files=[str(p.relative_to(self.project.directory)) for p in folder.iterdir()])
+
+    def export_nuke(self, body):
+        with self.lock:
+            self.idle(); p = self.required()
+            folder = export_nuke(p, body.get('relative_scale', 1.), body.get('first_frame', 1))
+            files = [str(file.relative_to(p.directory)) for file in sorted(folder.iterdir())]
+            p.state.setdefault('exports', []).extend(files)
+            p.save()
+            return dict(directory=str(folder), files=files)
 
     def preview(self):
         with self.lock:
