@@ -41,9 +41,12 @@ guarded substitution только блока sampling в in-memory копии ф
 ordering внутри ячеек, затем round-robin по рангу. Это повышает coverage,
 но само по себе не гарантирует меньший jitter.
 
-Hooks допустимы **только в отдельном однопоточном процессе**. В `finally`
-восстанавливаются model options и обе обёрнутые функции. Обычный backend/UI
-не импортирует experimental module. CUDA deterministic algorithms не
+Research hooks допустимы **только в отдельном однопоточном процессе**. В `finally`
+восстанавливаются model options и обе обёрнутые функции. UI использует только
+sampling context в единственном tracking worker: checkbox в Active Tracking
+Solution сохраняет `backend.settings.correspondence_selector`; без поля применяется
+`random`, при включении — `top_confidence`. Остальные model options не меняются.
+CUDA deterministic algorithms не
 включаются; seeds Python/NumPy/Torch/OpenCV задаются перед каждым кадром.
 Baseline использует разные, воспроизводимые seeds для повторов; fixed-seed
 control сбрасывает все generators перед каждым запуском.

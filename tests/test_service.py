@@ -17,11 +17,13 @@ class FakeBackend:
     capabilities = BackendCapabilities()
     def __init__(self):
         self.calls = []
+        self.selectors = []
         self.after_frame = None
     def initialize(self): pass
     def shutdown(self): pass
     def refine_frame(self, image, mesh, camera, initial, index, *masks):
         self.calls.append(index)
+        self.selectors.append(self.correspondence_selector)
         matrix = initial.T_cam_from_object.copy(); matrix[0,3] += 1
         if self.after_frame: self.after_frame(index)
         return FrameResult(index, Pose(matrix), .9, 1., 0., FrameStatus.TRACKED, .01)
@@ -53,6 +55,37 @@ class ServiceTests(unittest.TestCase):
         self.app.refine(0); self.wait(); self.app.accept(0)
         self.assertEqual(p['anchors']['0']['matrix'][0][3], 1)
         self.assertEqual(p['poses']['0']['matrix'][0][3], 1)
+
+    def test_selector_persistence_and_shared_refine_tracking_path(self):
+        directory=self.app.project.directory
+        # Existing projects have no selector field; loading does not add it.
+        self.assertNotIn('correspondence_selector',self.app.project.state['backend'].get('settings',{}))
+        self.app.load(dict(directory=directory))
+        self.assertNotIn('correspondence_selector',self.app.project.state['backend'].get('settings',{}))
+        for selector in ['random','top_confidence','random']:
+            self.app.settings(dict(correspondence_selector=selector))
+            self.app.load(dict(directory=directory))
+            self.assertEqual(self.app.project.state['backend']['settings']['correspondence_selector'],selector)
+            self.backend.selectors.clear()
+            self.app.refine(0);self.wait()
+            self.app.track(dict(start=0,end=2));self.wait()
+            self.assertEqual(self.backend.selectors,[selector]*4)
+            self.assertEqual(self.app.project.state['backend']['settings']['correspondence_selector'],selector)
+
+    def test_legacy_project_resets_resident_backend_to_random(self):
+        self.app.settings(dict(correspondence_selector='top_confidence'))
+        self.app.refine(0);self.wait()
+        self.assertEqual(self.backend.selectors[-1],'top_confidence')
+        self.app.project.state['backend']['settings'].pop('correspondence_selector')
+        self.app.project.save()
+        self.app.load(dict(directory=self.app.project.directory))
+        self.app.refine(0);self.wait()
+        self.app.track(dict(start=0,end=1));self.wait()
+        self.assertEqual(self.backend.selectors[-3:],['random']*3)
+        self.assertNotIn('correspondence_selector',self.app.project.state['backend']['settings'])
+
+    def test_selector_rejects_unsupported_values(self):
+        with self.assertRaises(ValueError):self.app.settings(dict(correspondence_selector='spatial_confidence'))
     def test_cancel_reopen_resume_retrack_only_range(self):
         self.backend.after_frame=lambda index:self.app.cancel.set()
         self.app.track(dict(start=0,end=4)); self.wait()

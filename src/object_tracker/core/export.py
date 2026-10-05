@@ -6,18 +6,20 @@ import numpy as np
 import cv2
 from .storage import atomic_json
 from .viewer import render
+from object_tracker.temporal.state import selected_entries
 
 
-def export_poses(project):
+def export_poses(project, pose_source='raw'):
     folder = project.directory / 'exports' / uuid.uuid4().hex
     folder.mkdir(parents=True)
-    entries = sorted(project.state['poses'].items(), key=lambda item: int(item[0]))
+    entries = sorted(selected_entries(project, pose_source).items(), key=lambda item: int(item[0]))
     frames = np.array([int(key) for key, _ in entries], dtype=np.int64)
     matrices = np.array([entry['matrix'] for _, entry in entries], dtype=np.float64).reshape(-1, 4, 4)
     np.save(folder / 'poses.npy', matrices)
     np.savez(folder / 'poses.npz', frame_indices=frames, T_cam_from_object=matrices)
     atomic_json(folder / 'poses.json', dict(convention='T_cam_from_object', camera_axes='OpenCV', units='mm',
-                                          camera=project.state['camera'], poses=dict(entries)))
+                                          camera=project.state['camera'], pose_source=pose_source,
+                                          temporal_parameters=project.state.get('temporal', {}).get('parameters') if pose_source == 'filtered' else None, poses=dict(entries)))
     with (folder / 'poses.csv').open('w', newline='') as stream:
         writer = csv.writer(stream)
         writer.writerow(['frame', 'source_number', 'filename', 'score', 'tx', 'ty', 'tz',
@@ -35,7 +37,8 @@ def export_poses(project):
     return folder
 
 
-def preview_video(project, mesh, progress=None, cancel=None):
+def preview_video(project, mesh, progress=None, cancel=None, pose_source='raw'):
+    pose_entries = selected_entries(project, pose_source)
     target = project.directory / 'previews' / (uuid.uuid4().hex + '.mp4')
     camera = project.state['camera']
     writer = cv2.VideoWriter(str(target), cv2.VideoWriter_fourcc(*'mp4v'),
@@ -46,7 +49,7 @@ def preview_video(project, mesh, progress=None, cancel=None):
         for index in range(len(project.state['source']['frames'])):
             if cancel is not None and cancel.is_set():
                 break
-            image = render(project, mesh, index, initial=False, masks=False)
+            image = render(project, mesh, index, initial=False, masks=False, pose_source=pose_source, pose_entries=pose_entries)
             entry = project.state['poses'].get(str(index), {})
             text = f"Frame {index}  score {entry.get('score')}  {entry.get('status', 'UNTRACKED')}"
             cv2.putText(image, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, .8, (255, 255, 255), 2)

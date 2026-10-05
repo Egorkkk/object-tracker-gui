@@ -72,7 +72,7 @@ def draw_pose(image, mesh, matrix, camera, color, mode='contour', opacity=0.5):
             cv2.polylines(image, [np.round(hull).astype(np.int32)], True, color, 2, cv2.LINE_AA)
 
 
-def render(project, mesh, index, initial=True, refined=True, masks=True, mode='contour', opacity=0.5, object_mask=True, occlusion_mask=True):
+def render(project, mesh, index, initial=True, refined=True, masks=True, mode='contour', opacity=0.5, object_mask=True, occlusion_mask=True, pose_source='raw', pose_entries=None):
     image = cv2.cvtColor(project.sequence.rgb(index), cv2.COLOR_RGB2BGR)
     camera = CameraIntrinsics(**project.state['camera'])
     if masks:
@@ -94,7 +94,9 @@ def render(project, mesh, index, initial=True, refined=True, masks=True, mode='c
         except ValueError:
             pass
     if refined and mesh is not None:
-        result = project.state['refinements'].get(key) or project.state['poses'].get(key)
+        from object_tracker.temporal.state import selected_entries
+        result = ((pose_entries if pose_entries is not None else selected_entries(project, pose_source)).get(key) if pose_source == 'filtered'
+                  else project.state['refinements'].get(key) or project.state['poses'].get(key))
         if result:
             draw_pose(image, mesh, result['matrix'], camera, (0, 255, 0), mode, opacity)
     return image

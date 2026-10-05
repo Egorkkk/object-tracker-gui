@@ -19,6 +19,9 @@ from object_tracker.core.masks import match_masks, frame_masks
 from object_tracker.core.export import export_poses, preview_video
 from object_tracker.core.export_nuke import export_nuke
 
+from object_tracker.temporal.state import defaults as temporal_defaults, ensure as ensure_temporal
+from object_tracker.temporal.pose_filter import TemporalParameters
+
 from .resources import ResourceOperations
 
 log = logging.getLogger(__name__)
@@ -40,6 +43,8 @@ class Application(ResourceOperations):
 
     def snapshot(self):
         with self.lock:
+            if self.project and not self.busy and ensure_temporal(self.project.state):
+                self.project.save()
             return dict(project=deepcopy(self.project.state) if self.project else None,
                         directory=str(self.project.directory) if self.project else None,
                         busy=self.busy, error=self.error, activity=self.activity, progress=deepcopy(self.progress))
@@ -110,6 +115,11 @@ class Application(ResourceOperations):
     def settings(self, body):
         with self.lock:
             self.idle(); p = self.required()
+            if 'correspondence_selector' in body:
+                selector = body['correspondence_selector']
+                if selector not in ('random', 'top_confidence'):
+                    raise ValueError('Недопустимый correspondence selector')
+                p.state['backend'].setdefault('settings', {})['correspondence_selector'] = selector
             if 'thresholds' in body:
                 values = body['thresholds']
                 if any(not np.isfinite(x) or x < 0 for x in values.values()):
@@ -171,9 +181,11 @@ class Application(ResourceOperations):
         self.backend.output = p.directory / 'cache/gotrack_internal' / attempt
         self.backend.initialize()
         with self.lock:
+            settings = dict(p.state['backend'].get('settings', {}), masks_enabled=False, pose_units='mm')
+            self.backend.correspondence_selector = settings.get('correspondence_selector', 'random')
             p.state['backend'] = dict(id=self.backend.backend_id, version=self.backend.version,
                                      capabilities=asdict(self.backend.capabilities),
-                                     settings=dict(masks_enabled=False, pose_units='mm'),
+                                     settings=settings,
                                      metadata=getattr(self.backend, 'metadata', {}))
             p.save()
         return self.backend
@@ -273,11 +285,31 @@ class Application(ResourceOperations):
                 job['status'] = 'cancelling'; p.save()
         return self.snapshot()
 
-    def export(self):
+    def temporal(self, body):
         with self.lock:
             self.idle()
             p = self.required()
-            folder = export_poses(p)
+            temporal = deepcopy(p.state.get('temporal') or temporal_defaults())
+            if body.get('reset'):
+                temporal['parameters'] = asdict(TemporalParameters(enabled=True))
+            parameters = dict(temporal['parameters'], **body.get('parameters', {}))
+            TemporalParameters(**parameters)
+            preview = body.get('preview', temporal['preview'])
+            if preview not in ('raw', 'filtered'):
+                raise ValueError('Pose source must be raw or filtered')
+            temporal.update(parameters=parameters, preview=preview)
+            if body.get('recompute'):
+                temporal['source_signature'] = None
+            p.state['temporal'] = temporal
+            ensure_temporal(p.state)
+            p.save()
+        return self.snapshot()
+
+    def export(self, body=None):
+        with self.lock:
+            self.idle()
+            p = self.required()
+            folder = export_poses(p, (body or {}).get('pose_source', 'raw'))
             download = str((folder / 'poses_package.zip').relative_to(p.directory))
             p.state.setdefault('exports', []).append(download)
             p.save()
@@ -287,21 +319,21 @@ class Application(ResourceOperations):
     def export_nuke(self, body):
         with self.lock:
             self.idle(); p = self.required()
-            folder = export_nuke(p, body.get('relative_scale', 1.), body.get('first_frame', 1))
+            folder = export_nuke(p, body.get('relative_scale', 1.), body.get('first_frame', 1), body.get('pose_source', 'raw'))
             files = [str(file.relative_to(p.directory)) for file in sorted(folder.iterdir())]
             download = str((folder / 'nuke_package.zip').relative_to(p.directory))
             p.state.setdefault('exports', []).append(download)
             p.save()
             return dict(directory=str(folder), files=files, download=download)
 
-    def preview(self):
+    def preview(self, body=None):
         with self.lock:
             self.idle(); p = self.required(); mesh = self.mesh
             def work():
                 def progress(count):
                     with self.lock:
                         self.progress = dict(completed=count, total=len(p.sequence.frames))
-                path = preview_video(p, mesh, progress, self.cancel)
+                path = preview_video(p, mesh, progress, self.cancel, (body or {}).get('pose_source', 'raw'))
                 with self.lock:
                     p.state['last_preview'] = str(path.relative_to(p.directory))
                     p.state.setdefault('exports', []).append(p.state['last_preview']); p.save()

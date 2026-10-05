@@ -156,6 +156,8 @@ class Project:
         return cls(directory, state)
 
     def save(self):
+        from object_tracker.temporal.state import invalidate
+        invalidate(self.state)
         atomic_json(self.directory / 'project.json', self.state)
 
     def check_index(self, index):

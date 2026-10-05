@@ -6,6 +6,7 @@ import zipfile
 import numpy as np
 import trimesh
 from .storage import atomic_json
+from object_tracker.temporal.state import selected_entries
 from .types import CameraIntrinsics, Pose
 
 BASIS = np.diag([1., -1., -1., 1.])
@@ -33,7 +34,7 @@ def _matrix_curves(samples):
     return ' '.join(rows)
 
 
-def export_nuke(project, relative_scale=1., first_frame=1):
+def export_nuke(project, relative_scale=1., first_frame=1, pose_source='raw'):
     relative_scale = float(relative_scale)
     if not math.isfinite(relative_scale) or relative_scale <= 0:
         raise ValueError('Relative scale должен быть положительным конечным числом')
@@ -48,7 +49,7 @@ def export_nuke(project, relative_scale=1., first_frame=1):
     camera = CameraIntrinsics(**state['camera'])
     if camera.distortion and any(camera.distortion):
         raise ValueError('Nuke export поддерживает pinhole camera без distortion')
-    entries = sorted(state['poses'].items(), key=lambda item: int(item[0]))
+    entries = sorted(selected_entries(project, pose_source).items(), key=lambda item: int(item[0]))
     samples = [(first_frame+project.check_index(int(key)), nuke_matrix(entry['matrix'], relative_scale)) for key, entry in entries]
     mesh = trimesh.load(state['mesh']['prepared'])
     if not isinstance(mesh, trimesh.Trimesh):
@@ -127,7 +128,8 @@ ScanlineRender {{
 }}
 '''
     (folder/'scene.nk').write_text(scene, encoding='utf-8')
-    atomic_json(folder/'animation.json', dict(version=1, relative_scale=relative_scale,
+    atomic_json(folder/'animation.json', dict(version=1, pose_source=pose_source,
+                                             temporal_parameters=state.get('temporal', {}).get('parameters') if pose_source == 'filtered' else None, relative_scale=relative_scale,
         first_frame=first_frame, fps=state['source']['fps'], camera=state['camera'],
         convention='T_nuke_camera_from_object; +X right, +Y up, -Z forward',
         source_indices=[int(key) for key, _ in entries],

@@ -66,14 +66,18 @@ there is no automatic dependency or model download.
    when enabled; baseline pose propagation is unchanged.
 8. Cancel between frames, reopen and **Resume**. Saved results are retained.
    Correct a pose and retrack only the affected range.
-9. In **REVIEW**, scrub/play, inspect score/ΔT/ΔR and click diagnostic graphs to
+9. In **REVIEW**, enable **Temporal Smoothing**, adjust Strength / Translation /
+   Rotation, and compare **Raw / Filtered** using the viewer Pose selector.
+   Filtering is non-destructive and can be recomputed without tracking.
+   See [temporal filtering details and validation](docs/TEMPORAL_SMOOTHING.md).
+   Scrub/play, inspect score/ΔT/ΔR and click diagnostic graphs to
    navigate. Viewer supports fit, 1:1, wheel zoom, middle-button pan, independent
    overlays, wireframe and shaded preview. Resize panels with splitters; sizes
    persist in the browser.
 10. Select each mask layer to browse a server folder or upload multiple masks.
     Match by filename stem or source frame number. Object and occlusion masks
     remain separate; GoTrack baseline does not use them for refinement.
-11. Select **Exports** for NPY, indexed NPZ, JSON, CSV and an overlay MP4 at source
+11. Select **Exports**, choose **Raw** or **Filtered** pose source, then export NPY, indexed NPZ, JSON, CSV and an overlay MP4 at source
     FPS. Poses are packed into one ZIP and automatically downloaded; a completed
     preview MP4 also downloads automatically. Links remain for repeat downloads.
 

@@ -92,7 +92,7 @@ def handler_class(application):
                     image = render(snapshot, mesh, index, initial=query.get('initial', '1') == '1',
                                    refined=query.get('refined', '1') == '1', masks=query.get('masks', '1') == '1',
                                    object_mask=query.get('object_mask', '1') == '1', occlusion_mask=query.get('occlusion_mask', '1') == '1',
-                                   mode=query.get('mode', 'contour'), opacity=max(0., min(1., float(query.get('opacity', .5)))))
+                                   pose_source=query.get('pose_source', 'raw'), mode=query.get('mode', 'contour'), opacity=max(0., min(1., float(query.get('opacity', .5)))))
                     ok, data = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 90])
                     if not ok:
                         raise ValueError('Не удалось сформировать preview кадра')
@@ -157,9 +157,10 @@ def handler_class(application):
                 elif path == '/api/solution': result = application.activate_solution(body['id'])
                 elif path == '/api/uploads/start': result = application.begin_upload(body['kind'])
                 elif path == '/api/masks': result = application.masks(body)
-                elif path == '/api/export': result = application.export()
+                elif path == '/api/temporal': result = application.temporal(body)
+                elif path == '/api/export': result = application.export(body)
                 elif path == '/api/export/nuke': result = application.export_nuke(body)
-                elif path == '/api/preview': result = application.preview()
+                elif path == '/api/preview': result = application.preview(body)
                 elif path == '/api/save':
                     with application.lock:
                         application.required().save()

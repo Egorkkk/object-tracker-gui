@@ -1,7 +1,8 @@
-"""Opt-in, process-local research hooks. Never imported by the UI backend.
+"""Opt-in correspondence selection and process-local research hooks.
 
-Use in a dedicated single-threaded lab process only. The original PnP function
-and model options are restored on exit; upstream/runtime files are not edited.
+Research hooks run in a dedicated lab process; the sampling-only context also
+supports the single-owner UI worker. Original functions/options are restored
+on exit; upstream/runtime files are not edited.
 """
 from contextlib import contextmanager
 import inspect
@@ -66,6 +67,42 @@ def actual_settings(model):
     return settings
 
 
+def _selection_function(original_pnp, strategy):
+    if strategy == 'random':
+        return original_pnp
+    if strategy not in ('top_confidence', 'spatial_confidence'):
+        raise ValueError('Unknown correspondence strategy')
+    # Change only the sampling boundary; keep solver/evaluation/fallback intact.
+    code = textwrap.dedent(inspect.getsource(original_pnp))
+    needle = '''sampled_ids = np.random.choice(
+                        len(corresp_2d_),
+                        pnp_opts.max_num_corresps,
+                        replace=False,
+                    )'''
+    if code.count(needle) != 1:
+        raise RuntimeError('Upstream PnP changed: review experimental hook')
+    replacement = "sampled_ids = _lab_select(corresp_2d_, corresp_weight_, pnp_opts.max_num_corresps)"
+    namespace = dict(original_pnp.__globals__)
+    namespace['_lab_select'] = lambda p, w, n: select_correspondences(p, w, n, strategy)
+    exec(compile(code.replace(needle, replacement), '<jitter-lab-pnp>', 'exec'), namespace)
+    return namespace['poses_from_correspondences']
+
+
+@contextmanager
+def correspondence_selection(strategy):
+    """Scoped sampling-only hook for the single-owner GoTrack worker."""
+    if strategy == 'random':
+        yield
+        return
+    from utils import pnp_util
+    original = pnp_util.poses_from_correspondences
+    pnp_util.poses_from_correspondences = _selection_function(original, strategy)
+    try:
+        yield
+    finally:
+        pnp_util.poses_from_correspondences = original
+
+
 @contextmanager
 def experiment(backend, settings, trace):
     """Apply only explicit deltas to actual baseline; capture PnP and iterations."""
@@ -83,23 +120,7 @@ def experiment(backend, settings, trace):
         opts['pnp_opts'] = (original_opts.pnp_opts or PnPOpts())._replace(**settings['pnp_opts'])
     model.opts = original_opts._replace(**opts)
     try:
-        function = original_pnp
-        if strategy != 'random':
-            # Minimal guarded substitution at the existing sampling boundary.
-            # All solve/evaluation/fallback code stays identical to upstream.
-            code = textwrap.dedent(inspect.getsource(original_pnp))
-            needle = '''sampled_ids = np.random.choice(
-                        len(corresp_2d_),
-                        pnp_opts.max_num_corresps,
-                        replace=False,
-                    )'''
-            if code.count(needle) != 1:
-                raise RuntimeError('Upstream PnP changed: review experimental hook')
-            replacement = "sampled_ids = _lab_select(corresp_2d_, corresp_weight_, pnp_opts.max_num_corresps)"
-            namespace = dict(original_pnp.__globals__)
-            namespace['_lab_select'] = lambda p, w, n: select_correspondences(p, w, n, strategy)
-            exec(compile(code.replace(needle, replacement), '<jitter-lab-pnp>', 'exec'), namespace)
-            function = namespace['poses_from_correspondences']
+        function = _selection_function(original_pnp, strategy)
 
         def observed_pnp(*args, **kwargs):
             bound = inspect.signature(original_pnp).bind(*args, **kwargs)

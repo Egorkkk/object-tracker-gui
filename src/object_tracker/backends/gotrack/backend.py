@@ -9,6 +9,8 @@ from object_tracker.core.types import FrameResult, FrameStatus, Pose
 from . import adapter
 from .diagnostics import check_runtime, checkpoint_identity
 from .environment import activate_runtime, backend_version, prepare_runtime
+from .experimental import correspondence_selection
+from .quality import capture_quality
 
 
 class GoTrackBackend:
@@ -25,6 +27,7 @@ class GoTrackBackend:
         self.model = None
         self.metadata = {}
         self.mesh_path = None
+        self.correspondence_selector = 'random'
         self.version = backend_version(self.source)
 
     def initialize(self):
@@ -86,7 +89,7 @@ class GoTrackBackend:
         self.model.result_dir = self.output
         inputs = adapter.make_inputs(image, adapter.make_camera(camera), initial_pose.T_cam_from_object)
         start = time.perf_counter()
-        with torch.inference_mode():
+        with torch.inference_mode(), correspondence_selection(self.correspondence_selector), capture_quality() as quality:
             outputs = self.model.forward_pipeline(inputs, batch_idx=frame_index)
         pose = Pose(outputs["objects"].poses_cam_from_model[0].detach().cpu().numpy().astype(np.float32))
         score = float(outputs["objects"].pose_scores[0].detach().cpu())
@@ -94,7 +97,9 @@ class GoTrackBackend:
         # Masks are transported but intentionally not consumed by the baseline.
         return FrameResult(frame_index, pose, score, dt, dr, FrameStatus.TRACKED,
                            time.perf_counter() - start,
-                           {"inference_runtime": float(outputs["run_time"]),
+                           {"frame_quality": quality[-1] if quality else {},
+                            "inference_runtime": float(outputs["run_time"]),
+                            "correspondence_selector": self.correspondence_selector,
                             "object_mask_used": False, "occlusion_mask_used": False})
 
     def track_range(self, frames, mesh, camera, initial_pose, frame_range,
